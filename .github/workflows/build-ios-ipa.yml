@@ -1,7 +1,7 @@
 name: Build KOReader iOS IPA
 
 on:
-  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+  workflow_dispatch:
   push:
     branches:
       - master
@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0 # Fetches full git history and tags so git describe works
 
       - name: Select latest Xcode
         run: |
@@ -29,7 +30,7 @@ jobs:
         run: |
           brew update
           brew install autoconf automake bash binutils cmake coreutils findutils \
-            gettext gnu-getopt libtool make meson nasm ninja pkgconf sdl3 util-linux
+            gettext gnu-getopt libtool make meson nasm ninja pkgconf sdl3 util-linux xcodegen
 
       - name: Configure GNU tools in PATH
         run: |
@@ -41,12 +42,13 @@ jobs:
           echo "$BREW_PREFIX/opt/util-linux/bin" >> $GITHUB_PATH
           echo "$BREW_PREFIX/bin" >> $GITHUB_PATH
 
-      - name: Verify GNU make version
-        run: make --version
+      - name: Verify GNU make and xcodegen
+        run: |
+          make --version
+          xcodegen --version
 
       - name: Build host LuaJIT for bytecode precompilation
         run: |
-          # Optional step from hezi/koreader-ios README that speeds up iOS boot time
           make TARGET=macos base -j$(sysctl -n hw.ncpu) || true
 
       - name: Generate Xcode project
