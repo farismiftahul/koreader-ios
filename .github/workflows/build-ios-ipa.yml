@@ -64,6 +64,7 @@ jobs:
       - name: Generate Info.plist, staging tree, and Xcode project
         run: |
           make TARGET=ios -j$(sysctl -n hw.ncpu)
+          make TARGET=ios xcodeproj -j$(sysctl -n hw.ncpu)
 
       - name: Build unsigned iOS app bundle
         run: |
