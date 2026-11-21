@@ -1,0 +1,88 @@
+name: Build KOReader iOS IPA
+
+on:
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select latest Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          echo "Selecting $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH"
+          xcodebuild -version
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew update
+          brew install autoconf automake bash binutils cmake coreutils findutils \
+            gettext gnu-getopt libtool make meson nasm ninja pkgconf sdl3 util-linux
+
+      - name: Configure GNU tools in PATH
+        run: |
+          BREW_PREFIX=$(brew --prefix)
+          echo "$BREW_PREFIX/opt/make/libexec/gnubin" >> $GITHUB_PATH
+          echo "$BREW_PREFIX/opt/coreutils/libexec/gnubin" >> $GITHUB_PATH
+          echo "$BREW_PREFIX/opt/findutils/libexec/gnubin" >> $GITHUB_PATH
+          echo "$BREW_PREFIX/opt/gnu-getopt/bin" >> $GITHUB_PATH
+          echo "$BREW_PREFIX/opt/util-linux/bin" >> $GITHUB_PATH
+          echo "$BREW_PREFIX/bin" >> $GITHUB_PATH
+
+      - name: Verify GNU make version
+        run: make --version
+
+      - name: Build host LuaJIT for bytecode precompilation
+        run: |
+          # Optional step from hezi/koreader-ios README that speeds up iOS boot time
+          make TARGET=macos base -j$(sysctl -n hw.ncpu) || true
+
+      - name: Generate Xcode project
+        run: |
+          make TARGET=ios xcodeproj -j$(sysctl -n hw.ncpu)
+
+      - name: Build unsigned iOS app bundle
+        run: |
+          xcodebuild \
+            -project KOReader.xcodeproj \
+            -scheme KOReader \
+            -configuration Release \
+            -sdk iphoneos \
+            -arch arm64 \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package .app into unsigned .ipa
+        run: |
+          mkdir -p build/Payload
+          APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Could not find built .app bundle"
+            exit 1
+          fi
+          cp -R "$APP_PATH" build/Payload/
+          cd build
+          zip -qry KOReader-ios-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KOReader-iOS-IPA
+          path: build/KOReader-ios-unsigned.ipa
+          if-no-files-found: error
