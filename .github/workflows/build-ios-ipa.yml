@@ -61,10 +61,15 @@ jobs:
         run: |
           make TARGET=macos base -j$(sysctl -n hw.ncpu) || true
 
-      - name: Generate Info.plist, staging tree, and Xcode project
+      - name: Generate Xcode project and Info.plist
         run: |
-          make TARGET=ios -j$(sysctl -n hw.ncpu)
           make TARGET=ios xcodeproj -j$(sysctl -n hw.ncpu)
+          make TARGET=ios platform/ios/Info.plist || true
+          if [ ! -f platform/ios/Info.plist ] && [ -f platform/ios/Info.plist.in ]; then
+            VER=$(git describe --tags | sed 's/^v//; s/-.*//')
+            sed "s/@VERSION@/${VER:-2026.04}/g; s/\$(VERSION)/${VER:-2026.04}/g" platform/ios/Info.plist.in > platform/ios/Info.plist
+          fi
+          ls -la platform/ios/
 
       - name: Build unsigned iOS app bundle
         run: |
