@@ -17,7 +17,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0 # Fetches full git history and tags so git describe works
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Ensure git tags exist for version string
+        run: |
+          if ! git describe --tags >/dev/null 2>&1; then
+            echo "No tags found in fork; fetching tags from upstream KOReader..."
+            git remote add upstream https://github.com/koreader/koreader.git || true
+            git fetch upstream --tags --depth=1 || git tag -a v2026.04 -m "Fallback version tag"
+          fi
+          git describe --tags
 
       - name: Select latest Xcode
         run: |
@@ -51,9 +61,9 @@ jobs:
         run: |
           make TARGET=macos base -j$(sysctl -n hw.ncpu) || true
 
-      - name: Generate Xcode project
+      - name: Generate Info.plist, staging tree, and Xcode project
         run: |
-          make TARGET=ios xcodeproj -j$(sysctl -n hw.ncpu)
+          make TARGET=ios -j$(sysctl -n hw.ncpu)
 
       - name: Build unsigned iOS app bundle
         run: |
